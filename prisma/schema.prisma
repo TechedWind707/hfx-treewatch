@@ -1,0 +1,68 @@
+// HFX TreeWatch — data model
+// Severity triage for Halifax Urban Forestry 311 tree requests.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A citizen-submitted tree request (a 311 ticket).
+model Ticket {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // What the resident submitted
+  address     String
+  description String
+  photoPath   String? // path under /public/uploads or a data URL for demo tickets
+  reporterName String?
+  reporterContact String?
+
+  // Claude's assessment (nullable until scored)
+  severity      Int? // 1 (routine) .. 5 (imminent hazard)
+  reasoning     String? // one sentence citing specific evidence
+  confidence    String? // "high" | "medium" | "low"
+  lowConfidence Boolean @default(false)
+  scoredAt      DateTime?
+  modelUsed     String?
+
+  // Dispatcher overrides
+  overrideSeverity Int?
+  overrideNote     String?
+  overriddenBy     String?
+  overriddenAt     DateTime?
+
+  status     TicketStatus @default(OPEN)
+  closedAt   DateTime?
+  closedBy   String?
+  closeNote  String?
+
+  // Pre-seeded historical context used at scoring time
+  siteHistory SiteHistory[]
+
+  @@index([status, severity])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
+
+/// Context the city already has: prior tickets at the address, storm zone, species risk.
+model SiteHistory {
+  id        String   @id @default(cuid())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId  String
+
+  kind      String // "prior_ticket" | "storm_zone" | "species_risk" | "inspection"
+  summary   String
+  occurredAt DateTime?
+
+  @@index([ticketId])
+}
