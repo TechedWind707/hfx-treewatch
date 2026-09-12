@@ -1,5 +1,16 @@
-// HFX TreeWatch — data model
-// Severity triage for Halifax Urban Forestry 311 tree requests.
+// HFX TreeWatch — shared data model.
+//
+// COLUMN OWNERSHIP IS STRICT. Two systems write to this database:
+//
+//   scoring wrapper (GCP, partner-owned) writes ONLY the fields in the
+//   "wrapper-owned" block below, and must never touch status, priority_final,
+//   override_reason, assigned_crew or anything in the staff blocks.
+//
+//   this application writes everything else.
+//
+// Local development runs on SQLite. Switching to the shared Cloud SQL Postgres
+// is a provider + url change here plus String -> Json on the payload columns;
+// nothing in the application code reaches past lib/domain.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,59 +21,103 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// A citizen-submitted tree request (a 311 ticket).
-model Ticket {
-  id          String   @id @default(cuid())
+model Submission {
+  id          String   @id @default(uuid())
+  /// Human-facing case number, e.g. TW-1042. Generated here, passed to the
+  /// wrapper as an opaque string.
+  reference   String   @unique
   createdAt   DateTime @default(now())
+  submittedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // What the resident submitted
-  address     String
-  description String
-  photoPath   String? // path under /public/uploads or a data URL for demo tickets
-  reporterName String?
-  reporterContact String?
+  // ---- resident submission -------------------------------------------
+  lat         Float
+  lng         Float
+  accuracyM   Float? @map("accuracy_m")
+  /// Reverse-geocoded on submit, best effort. Coordinates remain sufficient.
+  addressText String? @map("address_text")
 
-  // Claude's assessment (nullable until scored)
-  severity      Int? // 1 (routine) .. 5 (imminent hazard)
-  reasoning     String? // one sentence citing specific evidence
-  confidence    String? // "high" | "medium" | "low"
-  lowConfidence Boolean @default(false)
-  scoredAt      DateTime?
-  modelUsed     String?
+  description  String
+  /// JSON string arrays — SQLite has no array type. Json on Postgres.
+  whatsWrong   String @map("whats_wrong")
+  whatsNearby  String @map("whats_nearby")
+  whenNoticed  String @map("when_noticed")
 
-  // Dispatcher overrides
-  overrideSeverity Int?
-  overrideNote     String?
-  overriddenBy     String?
-  overriddenAt     DateTime?
+  // ---- never leaves this application, never sent to the wrapper -------
+  reporterName    String? @map("reporter_name")
+  reporterContact String? @map("reporter_contact")
 
-  status     TicketStatus @default(OPEN)
-  closedAt   DateTime?
-  closedBy   String?
-  closeNote  String?
+  // ---- wrapper-owned: do not write from this application --------------
+  priorityModel      String?   @map("priority_model")
+  priorityScoreModel Int?      @map("priority_score_model")
+  confidence         Float?
+  lowConfidence      Boolean   @default(false) @map("low_confidence")
+  /// JSON payloads exactly as the wrapper stores them.
+  detected           String?
+  estimated          String?
+  evidence           String?
+  conflicts          String?
+  modelVersion       String?   @map("model_version")
+  scoredAt           DateTime? @map("scored_at")
+  /// Set when the wrapper reports a perception failure or never responds.
+  scoringError       String?   @map("scoring_error")
 
-  // Pre-seeded historical context used at scoring time
-  siteHistory SiteHistory[]
+  // ---- staff decision: owned here -------------------------------------
+  status         String  @default("submitted")
+  priorityFinal  String? @map("priority_final")
+  overrideReason String? @map("override_reason")
+  overriddenBy   String? @map("overridden_by")
+  overriddenAt   DateTime? @map("overridden_at")
 
-  @@index([status, severity])
+  assignedCrew          String?   @map("assigned_crew")
+  inspectionScheduledAt DateTime? @map("inspection_scheduled_at")
+  inspectionFindings    String?   @map("inspection_findings")
+  workNotes             String?   @map("work_notes")
+
+  closedAt      DateTime? @map("closed_at")
+  closedBy      String?   @map("closed_by")
+  publicSummary String?   @map("public_summary")
+
+  photos Photo[]
+  events AuditEvent[]
+
+  @@index([status])
+  @@index([priorityModel])
+  @@map("submissions")
 }
 
-enum TicketStatus {
-  OPEN
-  IN_PROGRESS
-  CLOSED
+model Photo {
+  id           String @id @default(uuid())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submissionId String @map("submission_id")
+
+  /// full_tree | base_roots | the_problem | surroundings | extra
+  frameType String @map("frame_type")
+  /// Object-storage URL. The database holds the URL, never the bytes.
+  url       String
+  /// 0-based. This is the index the wrapper's evidence refers to as "photo N+1".
+  orderIndex Int @map("order_index")
+
+  @@index([submissionId, orderIndex])
+  @@map("photos")
 }
 
-/// Context the city already has: prior tickets at the address, storm zone, species risk.
-model SiteHistory {
-  id        String   @id @default(cuid())
-  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  ticketId  String
+model AuditEvent {
+  id           String     @id @default(uuid())
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submissionId String     @map("submission_id")
 
-  kind      String // "prior_ticket" | "storm_zone" | "species_risk" | "inspection"
-  summary   String
-  occurredAt DateTime?
+  createdAt DateTime @default(now()) @map("created_at")
+  actor     String
+  action    String
+  priorValue String? @map("prior_value")
+  newValue   String? @map("new_value")
+  note       String?
 
-  @@index([ticketId])
+  /// Only events flagged public appear on the resident's timeline.
+  isPublic   Boolean @default(false) @map("is_public")
+  publicText String? @map("public_text")
+
+  @@index([submissionId, createdAt])
+  @@map("audit_events")
 }

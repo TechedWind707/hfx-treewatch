@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Foundation — ~70% of the interface */
+  --color-canvas: #f8faf9;
+  --color-surface: #ffffff;
+
+  /* Forestry greens */
+  --color-forest: #176b3a;
+  --color-forest-hover: #12592f;
+  --color-deep: #0b3d2e;
+  --color-mist: #e7f3ea;
+
+  /* Civic accent — maps, pins, links only */
+  --color-civic: #056cb6;
+
+  /* Type + structure */
+  --color-ink: #0b3d2e;
+  --color-body: #2f3b36;
+  --color-muted: #5f6f68;
+  --color-line: #dce6e0;
+  --color-line-strong: #c3d3cb;
+
+  /* Semantic priority — always paired with a label and icon */
+  --color-critical: #c62828;
+  --color-critical-bg: #fdecec;
+  --color-high: #d97706;
+  --color-high-bg: #fdf3e4;
+  --color-moderate: #4e5d57;
+  --color-moderate-bg: #eef2f0;
+  --color-low: #6f807a;
+  --color-low-bg: #f2f5f4;
+
+  --font-sans: var(--font-libre-franklin), "Helvetica Neue", "Segoe UI",
+    sans-serif;
+
+  --radius-card: 10px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-canvas);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--color-ink);
+  font-weight: 600;
+  letter-spacing: -0.011em;
+}
+
+/* Visible focus everywhere — WCAG 2.2 */
+:focus-visible {
+  outline: 3px solid var(--color-civic);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--color-deep);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: 0 0 6px 0;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
